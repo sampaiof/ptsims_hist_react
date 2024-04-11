@@ -1,159 +1,117 @@
-import { Box, Typography, List, ListItem } from "@mui/material";
 import { GetServerSideProps } from 'next';
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell } from "@mui/material";
 import pool from "../../utils/db";
 import NavBar from '../../components/NavBar';
 
-type Round = {
+type RoundCount = {
+  year: number;
+  count: number;
+};
+
+type Team = {
   id: number;
   name: string;
-  date: string;
 };
 
 type Driver = {
   id: number;
   name: string;
   numero: number;
-  points: number;
+  team: Team | null; // Add team field
+  rounds?: RoundCount[];
 };
 
-type Competition = {
-  id: number;
-  name: string;
-  rounds: Round[];
-  drivers: Driver[];
+type DriverDetailsProps = {
+  driver: Driver;
 };
 
-type CompetitionProps = {
-  competition: Competition;
-  driverPoints: Record<number, number>;  // Updated this line
-};
-
-export default function CompetitionPage({ competition, driverPoints }: CompetitionProps) {
+const DriverDetails = ({ driver }: DriverDetailsProps) => {
   return (
     <>
       <NavBar />
       <Box p={4}>
-        <Typography variant="h4">{competition.name}</Typography>
-        
-        <Typography variant="h5" mt={4}>Rounds</Typography>
-        <List>
-          {competition.rounds.map((round) => (
-            <ListItem key={round.id}>
-              <Typography variant="body1">{round.name} - {round.date}</Typography>
-            </ListItem>
-          ))}
-        </List>
+        <Typography variant="h4">{driver.name}</Typography>
+        <Typography variant="subtitle1">Numero: {driver.numero}</Typography>
 
-        <Typography variant="h5" mt={4}>Drivers</Typography>
-        <List>
-          {competition.drivers.map((driver) => (
-            <ListItem key={driver.id}>
-              <Typography variant="body1">{driver.name} - {driver.numero} - Points: {driverPoints[driver.id]}</Typography>
-            </ListItem>
-          ))}
-        </List>
+        {/* Display Team */}
+        {driver.team && (
+          <Box mt={2}>
+            <Typography variant="h6">Team</Typography>
+            <Typography variant="body1">{driver.team.name}</Typography>
+          </Box>
+        )}
+
+        <Box mt={4}>
+          <Typography variant="h5">Round Counts Per Year</Typography>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Year</TableCell>
+                <TableCell>Round Count</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {driver.rounds?.map((round) => (
+                <TableRow key={round.year}>
+                  <TableCell>{round.year}</TableCell>
+                  <TableCell>{round.count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
       </Box>
     </>
   );
-}
+};
+
+export default DriverDetails;
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const { id } = params;
-
-  // Fetch competition details from the database based on the ID
-  const [competitionRows] = await pool.query('SELECT * FROM competition WHERE CompetitionID = ?', [id]);
-
-  if (competitionRows.length === 0) {
+  
+  // Fetch driver details from the database based on the ID
+  const [driverRows] = await pool.query('SELECT * FROM driver WHERE DriverID = ?', [id]);
+  
+  if (driverRows.length === 0) {
     return {
-      notFound: true,
+      notFound: true, // Return 404 page if driver not found
     };
   }
-
-  // Fetch rounds associated with the competition
-  const [roundRows] = await pool.query('SELECT * FROM round WHERE CompetitionID = ?', [id]);
-
-  // Fetch drivers associated with the competition
-  const [driverRows] = await pool.query(`
-    SELECT d.DriverID AS id, d.Name, d.Numero
-    FROM driver d 
-    JOIN competitiondriver cd ON d.DriverID = cd.DriverID 
-    WHERE cd.CompetitionID =  ?
+  
+  // Fetch round counts per year for the driver
+  const [roundRows] = await pool.query(`
+    SELECT 
+    YEAR(r.Date) AS year,
+    COUNT(*) AS totalRaces
+    FROM round r
+    JOIN rounddriver rd ON r.RoundID = rd.RoundID
+    JOIN driver d ON rd.DriverID = d.DriverID
+    WHERE d.DriverID = ?
+    GROUP BY year;
   `, [id]);
 
-  const competition: Competition = {
-    id: competitionRows[0].CompetitionID,
-    name: competitionRows[0].Name,
+  // Fetch team details for the driver
+  const [teamRows] = await pool.query(`
+    SELECT t.TeamID AS id, t.Name
+    FROM team t
+    JOIN driver d ON t.TeamID = d.TeamID
+    WHERE d.DriverID = ?
+  `, [id]);
+
+  const driver: Driver = {
+    id: driverRows[0].DriverID,
+    name: driverRows[0].Name,
+    numero: driverRows[0].Numero,
     rounds: roundRows.map((row: any) => ({
-      id: row.RoundID,
-      name: row.Name,
-      date: new Date(row.Date).toDateString(),
+      year: row.year,
+      count: row.totalRaces
     })),
-    drivers: driverRows.map((row: any) => ({
-      id: row.id,
-      name: row.Name,
-      numero: row.Numero,
-      points: 0,  // Default points to 0
-    })),
+    team: teamRows.length > 0 ? {
+      id: teamRows[0].id,
+      name: teamRows[0].Name
+    } : null
   };
-
-  const driverPoints: Record<number, number> = {};
-
-  for (const driver of competition.drivers) {
-    const [pointsRows] = await pool.query(`
-      SELECT rd.position
-      FROM rounddriver rd
-      JOIN round r ON rd.RoundID = r.RoundID
-      WHERE rd.DriverID = ? AND r.CompetitionID = ?
-    `, [driver.id, id]);
-
-    let totalPoints = 0;
-    for (const row of pointsRows) {
-      totalPoints += getPointsByPosition(row.position);
-    }
-
-    driver.points = totalPoints;  // Assign the calculated points to the driver object
-    driverPoints[driver.id] = totalPoints;
-  }
-
-  // Sort the drivers by points in descending order
-  competition.drivers.sort((a, b) => b.points - a.points);
-
-  return { props: { competition, driverPoints } };
-};
-
-const getPointsByPosition = (position: number): number => {
-  const pointsMap = {
-    1: 50,
-    2: 45,
-    3: 40,
-    4: 32,
-    5: 30,
-    6: 28,
-    7: 26,
-    8: 24,
-    9: 22,
-    10: 20,
-    11: 19,
-    12: 18,
-    13: 17,
-    14: 16,
-    15: 15,
-    16: 14,
-    17: 13,
-    18: 12,
-    19: 11,
-    20: 10,
-    21: 9,
-    22: 8,
-    23: 7,
-    24: 6,
-    25: 5,
-    26: 4,
-    27: 3,
-    28: 2,
-    29: 1,
-    30: 1,
-  };
-
-  return pointsMap[position] || 0;
+  
+  return { props: { driver } };
 };
