@@ -8,31 +8,36 @@ type RoundCount = {
   count: number;
 };
 
+type Competition = {
+  id: number;
+  name: string;
+  date: string;
+};
+
 type Driver = {
   id: number;
   name: string;
   numero: number;
   rounds?: RoundCount[];
-  top3: number;
-  top5: number;
-  top10: number;
-  polePositions: number;
-  victories: number;
-};
-
-type Race = {
-  id: number;
-  roundName: string;
-  date: string;
-  position: number;
+  lastRaces?: LastRace[];
+  lastCompetitions?: Competition[];
+  top3?: number;
+  top5?: number;
+  polePositions?: number;
+  victories?: number;
 };
 
 type DriverDetailsProps = {
   driver: Driver;
-  races: Race[];
 };
 
-const DriverDetails = ({ driver, races }: DriverDetailsProps) => {
+type LastRace = {
+  raceName: string;
+  date: string;
+  position: number;
+};
+
+const DriverDetails = ({ driver }: DriverDetailsProps) => {
   return (
     <>
       <NavBar />
@@ -40,6 +45,7 @@ const DriverDetails = ({ driver, races }: DriverDetailsProps) => {
         <Typography variant="h4">{driver.name}</Typography>
         <Typography variant="subtitle1">Numero: {driver.numero}</Typography>
 
+        {/* Round Counts Per Year Table */}
         <Box mt={4}>
           <Typography variant="h5">Round Counts Per Year</Typography>
           <Table>
@@ -60,48 +66,69 @@ const DriverDetails = ({ driver, races }: DriverDetailsProps) => {
           </Table>
         </Box>
 
-        <Box mt={4}>
-          <Typography variant="h5">Top Finishes</Typography>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Victories</TableCell>
-                <TableCell>Top 3</TableCell>
-                <TableCell>Top 5</TableCell>
-                <TableCell>Top 10</TableCell>
-                <TableCell>Pole Positions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell>{driver.victories}</TableCell>
-                <TableCell>{driver.top3}</TableCell>
-                <TableCell>{driver.top5}</TableCell>
-                <TableCell>{driver.top10}</TableCell>
-                <TableCell>{driver.polePositions}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </Box>
-
+        {/* Last 10 Races Table */}
         <Box mt={4}>
           <Typography variant="h5">Last 10 Races</Typography>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Race Name</TableCell>
+                <TableCell>Race</TableCell>
                 <TableCell>Date</TableCell>
                 <TableCell>Position</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {races.map((race) => (
-                <TableRow key={race.id}>
-                  <TableCell>{race.roundName}</TableCell>
+              {driver.lastRaces?.map((race) => (
+                <TableRow key={race.raceName}>
+                  <TableCell>{race.raceName}</TableCell>
                   <TableCell>{race.date}</TableCell>
                   <TableCell>{race.position}</TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        </Box>
+
+        {/* Last 4 Competitions Table */}
+        <Box mt={4}>
+          <Typography variant="h5">Last 4 Competitions</Typography>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Competition</TableCell>
+                <TableCell>Date</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {driver.lastCompetitions?.map((competition) => (
+                <TableRow key={competition.id}>
+                  <TableCell>{competition.name}</TableCell>
+                  <TableCell>{competition.date}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+
+        {/* Additional Driver Stats */}
+        <Box mt={4}>
+          <Typography variant="h5">Additional Stats</Typography>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Top 3</TableCell>
+                <TableCell>Top 5</TableCell>
+                <TableCell>Pole Positions</TableCell>
+                <TableCell>Victories</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>{driver.top3}</TableCell>
+                <TableCell>{driver.top5}</TableCell>
+                <TableCell>{driver.polePositions}</TableCell>
+                <TableCell>{driver.victories}</TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </Box>
@@ -120,7 +147,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   
   if (driverRows.length === 0) {
     return {
-      notFound: true, // Return 404 page if driver not found
+      notFound: true,
     };
   }
   
@@ -129,39 +156,48 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     SELECT 
     YEAR(r.Date) AS year,
     COUNT(*) AS totalRaces
-    FROM round r
-    JOIN rounddriver rd ON r.RoundID = rd.RoundID
-    JOIN driver d ON rd.DriverID = d.DriverID
-    WHERE d.DriverID = ?
-    GROUP BY year;
-  `, [id]);
-
-  // Fetch top finishes for the driver
-  const [topRows] = await pool.query(`
-    SELECT 
-    SUM(CASE WHEN position <= 3 THEN 1 ELSE 0 END) AS top3,
-    SUM(CASE WHEN position <= 5 THEN 1 ELSE 0 END) AS top5,
-    SUM(CASE WHEN position <= 10 THEN 1 ELSE 0 END) AS top10,
-    SUM(CASE WHEN pole_position = 1 THEN 1 ELSE 0 END) AS polePositions,
-    SUM(CASE WHEN position = 1 THEN 1 ELSE 0 END) AS victories
-    FROM rounddriver
-    WHERE DriverID = ?;
+  FROM round r
+  JOIN rounddriver rd ON r.RoundID = rd.RoundID
+  JOIN driver d ON rd.DriverID = d.DriverID
+  WHERE d.DriverID = ?
+  GROUP BY year;
   `, [id]);
 
   // Fetch last 10 races for the driver
   const [raceRows] = await pool.query(`
-    SELECT 
-    r.RoundID AS id,
-    r.Name AS roundName,
-    r.Date,
-    rd.position
+    SELECT r.Name AS raceName, r.Date, rd.position
     FROM round r
     JOIN rounddriver rd ON r.RoundID = rd.RoundID
-    WHERE rd.DriverID = ?
+    JOIN driver d ON rd.DriverID = d.DriverID
+    WHERE d.DriverID = ?
     ORDER BY r.Date DESC
     LIMIT 10;
   `, [id]);
-  
+
+  // Fetch last 4 competitions for the driver
+  const [competitionRows] = await pool.query(`
+    SELECT c.CompetitionID AS id, c.Name, c.Date
+    FROM competition c
+    JOIN round r ON c.CompetitionID = r.CompetitionID
+    JOIN rounddriver rd ON r.RoundID = rd.RoundID
+    JOIN driver d ON rd.DriverID = d.DriverID
+    WHERE d.DriverID = ?
+    GROUP BY c.CompetitionID
+    ORDER BY c.Date DESC
+    LIMIT 4;
+  `, [id]);
+
+  // Fetch additional stats for the driver
+  const [statsRows] = await pool.query(`
+    SELECT 
+      SUM(CASE WHEN rd.position <= 3 THEN 1 ELSE 0 END) AS top3,
+      SUM(CASE WHEN rd.position <= 5 THEN 1 ELSE 0 END) AS top5,
+      SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS polePositions,
+      SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS victories
+    FROM rounddriver rd
+    WHERE rd.DriverID = ?;
+  `, [id]);
+
   const driver: Driver = {
     id: driverRows[0].DriverID,
     name: driverRows[0].Name,
@@ -170,19 +206,21 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
       year: row.year,
       count: row.totalRaces
     })),
-    top3: topRows[0].top3,
-    top5: topRows[0].top5,
-    top10: topRows[0].top10,
-    polePositions: topRows[0].polePositions,
-    victories: topRows[0].victories
+    lastRaces: raceRows.map((row: any) => ({
+      raceName: row.raceName,
+      date: new Date (row.Date).toDateString(),
+      position: row.position
+    })),
+    lastCompetitions: competitionRows.map((row: any) => ({
+      id: row.id,
+      name: row.Name,
+      date: new Date(row.Date).toDateString()
+    })),
+    top3: statsRows[0].top3,
+    top5: statsRows[0].top5,
+    polePositions: statsRows[0].polePositions,
+    victories: statsRows[0].victories,
   };
-
-  const races: Race[] = raceRows.map((row: any) => ({
-    id: row.id,
-    roundName: row.roundName,
-    date: new Date(row.Date).toDateString(),
-    position: row.position
-  }));
-
-  return { props: { driver, races } };
+  
+  return { props: { driver } };
 };
