@@ -1,5 +1,17 @@
 import { GetServerSideProps } from 'next';
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+  Card,
+  CardContent,
+  Avatar,
+  Grid,
+} from "@mui/material";
 import pool from "../../utils/db";
 import NavBar from '../../components/NavBar';
 
@@ -12,6 +24,12 @@ type Competition = {
   id: number;
   name: string;
   date: string;
+};
+
+type LastRace = {
+  raceName: string;
+  date: string;
+  position: number;
 };
 
 type Driver = {
@@ -31,107 +49,84 @@ type DriverDetailsProps = {
   driver: Driver;
 };
 
-type LastRace = {
-  raceName: string;
-  date: string;
-  position: number;
-};
-
 const DriverDetails = ({ driver }: DriverDetailsProps) => {
+  const renderTableRows = (data: any[]) =>
+    data.map((item) => (
+      <TableRow key={item.id || item.raceName}>
+        {Object.values(item).map((value, index) => (
+          <TableCell key={index}>{value}</TableCell>
+        ))}
+      </TableRow>
+    ));
+
+  const renderTableCard = (title: string, data: any[], headers: string[], isStats?: boolean) => (
+    <Box mt={4} key={title}>
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ backgroundColor: '#f44336', color: 'white', padding: '8px', borderRadius: '4px', marginBottom: '16px' }}>{title}</Typography>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#e57373' }}>
+                {headers.map((header) => (
+                  <TableCell key={header} sx={{ color: 'white' }}>{header}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isStats ? (
+                <TableRow>
+                  {headers.map((header) => (
+                    <TableCell key={header}>
+                      {driver[header.toLowerCase() as keyof Driver] || 0}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ) : (
+                renderTableRows(data as any[])
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+
   return (
     <>
       <NavBar />
       <Box p={4}>
-        <Typography variant="h4">{driver.name}</Typography>
-        <Typography variant="subtitle1">Numero: {driver.numero}</Typography>
+        <Grid container spacing={3}>
+          {/* Driver Avatar */}
+          <Grid item xs={12}>
+            <Box display="flex" alignItems="center" justifyContent="center" mb={4}>
+              <Avatar sx={{ width: 100, height: 100, mr: 2 }}>
+                {driver.name.charAt(0)}
+              </Avatar>
+              <Box>
+                <Typography variant="h4">{driver.name}</Typography>
+                <Typography variant="subtitle1">Numero: {driver.numero}</Typography>
+              </Box>
+            </Box>
+          </Grid>
 
-        {/* Round Counts Per Year Table */}
-        <Box mt={4}>
-          <Typography variant="h5">Round Counts Per Year</Typography>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Year</TableCell>
-                <TableCell>Round Count</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {driver.rounds?.map((round) => (
-                <TableRow key={round.year}>
-                  <TableCell>{round.year}</TableCell>
-                  <TableCell>{round.count}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+          {/* Round Counts Per Year and Additional Stats */}
+          <Grid item xs={12} md={6}>
+            {renderTableCard("Round Counts Per Year", driver.rounds || [], ["Year", "Round Count"])}
+          </Grid>
+          <Grid item xs={12} md={6}>
+            {renderTableCard("Additional Stats", [driver], ["Top 3", "Top 5", "Pole Positions", "Victories"], true)}
+          </Grid>
 
-        {/* Last 10 Races Table */}
-        <Box mt={4}>
-          <Typography variant="h5">Last 10 Races</Typography>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Race</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Position</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {driver.lastRaces?.map((race) => (
-                <TableRow key={race.raceName}>
-                  <TableCell>{race.raceName}</TableCell>
-                  <TableCell>{race.date}</TableCell>
-                  <TableCell>{race.position}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+          {/* Last 10 Races */}
+          <Grid item xs={12}>
+            {renderTableCard("Last 10 Races", driver.lastRaces || [], ["Race", "Date", "Position"])}
+          </Grid>
 
-        {/* Last 4 Competitions Table */}
-        <Box mt={4}>
-          <Typography variant="h5">Last 4 Competitions</Typography>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Competition</TableCell>
-                <TableCell>Date</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {driver.lastCompetitions?.map((competition) => (
-                <TableRow key={competition.id}>
-                  <TableCell>{competition.name}</TableCell>
-                  <TableCell>{competition.date}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
-
-        {/* Additional Driver Stats */}
-        <Box mt={4}>
-          <Typography variant="h5">Additional Stats</Typography>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Top 3</TableCell>
-                <TableCell>Top 5</TableCell>
-                <TableCell>Pole Positions</TableCell>
-                <TableCell>Victories</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell>{driver.top3}</TableCell>
-                <TableCell>{driver.top5}</TableCell>
-                <TableCell>{driver.polePositions}</TableCell>
-                <TableCell>{driver.victories}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </Box>
+          {/* Last 4 Competitions */}
+          <Grid item xs={12}>
+            {renderTableCard("Last 4 Competitions", driver.lastCompetitions || [], ["Competition", "Date"])}
+          </Grid>
+        </Grid>
       </Box>
     </>
   );
@@ -141,62 +136,82 @@ export default DriverDetails;
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const { id } = params;
-  
-  // Fetch driver details from the database based on the ID
-  const [driverRows] = await pool.query('SELECT * FROM driver WHERE DriverID = ?', [id]);
-  
+  const queries = [
+    {
+      query: 'SELECT * FROM driver WHERE DriverID = ?',
+      key: 'driverRows',
+    },
+    {
+      query: `
+        SELECT 
+        YEAR(r.Date) AS year,
+        COUNT(*) AS totalRaces
+        FROM round r
+        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+        JOIN driver d ON rd.DriverID = d.DriverID
+        WHERE d.DriverID = ?
+        GROUP BY year;
+      `,
+      key: 'roundRows',
+    },
+    {
+      query: `
+        SELECT r.Name AS raceName, r.Date, rd.position
+        FROM round r
+        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+        JOIN driver d ON rd.DriverID = d.DriverID
+        WHERE d.DriverID = ?
+        ORDER BY r.Date DESC
+        LIMIT 10;
+      `,
+      key: 'raceRows',
+    },
+    {
+      query: `
+        SELECT c.CompetitionID AS id, c.Name, c.Date
+        FROM competition c
+        JOIN round r ON c.CompetitionID = r.CompetitionID
+        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+        JOIN driver d ON rd.DriverID = d.DriverID
+        WHERE d.DriverID = ?
+        GROUP BY c.CompetitionID
+        ORDER BY c.Date DESC
+        LIMIT 4;
+      `,
+      key: 'competitionRows',
+    },
+    {
+      query: `
+        SELECT 
+          SUM(CASE WHEN rd.position <= 3 THEN 1 ELSE 0 END) AS top3,
+          SUM(CASE WHEN rd.position <= 5 THEN 1 ELSE 0 END) AS top5,
+          SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS polePositions,
+          SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS victories
+        FROM rounddriver rd
+        WHERE rd.DriverID = ?;
+      `,
+      key: 'statsRows',
+    },
+  ];
+
+  const queriesPromises = queries.map(({ query, key }) =>
+    pool.query(query, [id]).then(([rows]) => ({ [key]: rows }))
+  );
+
+  const results = await Promise.all(queriesPromises);
+  const {
+    driverRows,
+    roundRows,
+    raceRows,
+    competitionRows,
+    statsRows,
+  } = Object.assign({}, ...results);
+
   if (driverRows.length === 0) {
     return {
       notFound: true,
     };
   }
-  
-  // Fetch round counts per year for the driver
-  const [roundRows] = await pool.query(`
-    SELECT 
-    YEAR(r.Date) AS year,
-    COUNT(*) AS totalRaces
-  FROM round r
-  JOIN rounddriver rd ON r.RoundID = rd.RoundID
-  JOIN driver d ON rd.DriverID = d.DriverID
-  WHERE d.DriverID = ?
-  GROUP BY year;
-  `, [id]);
-
-  // Fetch last 10 races for the driver
-  const [raceRows] = await pool.query(`
-    SELECT r.Name AS raceName, r.Date, rd.position
-    FROM round r
-    JOIN rounddriver rd ON r.RoundID = rd.RoundID
-    JOIN driver d ON rd.DriverID = d.DriverID
-    WHERE d.DriverID = ?
-    ORDER BY r.Date DESC
-    LIMIT 10;
-  `, [id]);
-
-  // Fetch last 4 competitions for the driver
-  const [competitionRows] = await pool.query(`
-    SELECT c.CompetitionID AS id, c.Name, c.Date
-    FROM competition c
-    JOIN round r ON c.CompetitionID = r.CompetitionID
-    JOIN rounddriver rd ON r.RoundID = rd.RoundID
-    JOIN driver d ON rd.DriverID = d.DriverID
-    WHERE d.DriverID = ?
-    GROUP BY c.CompetitionID
-    ORDER BY c.Date DESC
-    LIMIT 4;
-  `, [id]);
-
-  // Fetch additional stats for the driver
-  const [statsRows] = await pool.query(`
-    SELECT 
-      SUM(CASE WHEN rd.position <= 3 THEN 1 ELSE 0 END) AS top3,
-      SUM(CASE WHEN rd.position <= 5 THEN 1 ELSE 0 END) AS top5,
-      SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS polePositions,
-      SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS victories
-    FROM rounddriver rd
-    WHERE rd.DriverID = ?;
-  `, [id]);
 
   const driver: Driver = {
     id: driverRows[0].DriverID,
@@ -204,17 +219,16 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     numero: driverRows[0].Numero,
     rounds: roundRows.map((row: any) => ({
       year: row.year,
-      count: row.totalRaces
+      count: row.totalRaces,
     })),
     lastRaces: raceRows.map((row: any) => ({
       raceName: row.raceName,
-      date: new Date (row.Date).toDateString(),
-      position: row.position
+      date: new Date(row.Date).toDateString(),
+      position: row.position,
     })),
     lastCompetitions: competitionRows.map((row: any) => ({
-      id: row.id,
       name: row.Name,
-      date: new Date(row.Date).toDateString()
+      date: new Date(row.Date).toDateString(),
     })),
     top3: statsRows[0].top3,
     top5: statsRows[0].top5,
