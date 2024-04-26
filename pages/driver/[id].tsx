@@ -36,6 +36,7 @@ type Driver = {
   id: number;
   name: string;
   numero: number;
+  team: string;
   rounds?: RoundCount[];
   lastRaces?: LastRace[];
   lastCompetitions?: Competition[];
@@ -105,6 +106,7 @@ const DriverDetails = ({ driver }: DriverDetailsProps) => {
               <Box>
                 <Typography variant="h4">{driver.name}</Typography>
                 <Typography variant="subtitle1">Numero: {driver.numero}</Typography>
+                <Typography variant="subtitle1">Equipa: {driver.team}</Typography>
               </Box>
             </Box>
           </Grid>
@@ -138,7 +140,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const { id } = params;
   const queries = [
     {
-      query: 'SELECT * FROM driver WHERE DriverID = ?',
+      query: 'SELECT d.*, t.Name as TeamName FROM driver d join team t ON t.TeamID = d.TeamID where d.DriverID = ?',
       key: 'driverRows',
     },
     {
@@ -217,6 +219,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     id: driverRows[0].DriverID,
     name: driverRows[0].Name,
     numero: driverRows[0].Numero,
+    team: driverRows[0].TeamName,
     rounds: roundRows.map((row: any) => ({
       year: row.year,
       count: row.totalRaces,
