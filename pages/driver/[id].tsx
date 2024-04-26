@@ -98,7 +98,7 @@ const DriverDetails = ({ driver }: DriverDetailsProps) => {
         <Grid container spacing={3}>
           {/* Driver Avatar */}
           <Grid item xs={12}>
-            <Box display="flex" alignItems="center" justifyContent="center" mb={4}>
+            <Box display="flex" alignItems="left" justifyContent="left" mb={4}>
               <Avatar sx={{ width: 100, height: 100, mr: 2 }}>
                 {driver.name.charAt(0)}
               </Avatar>
