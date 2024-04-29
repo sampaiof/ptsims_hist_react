@@ -37,8 +37,7 @@ export default function CompetitionPage({ competition, driverPoints, driverPoleP
     <>
       <NavBar />
       <Box p={4}>
-        <Typography variant="h4">{competition.name}</Typography>
-        
+        <Typography variant="h4">{competition.name}</Typography>     
         <Typography variant="h5" mt={4}>Rounds</Typography>
         <table>
           <thead>
@@ -99,47 +98,43 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     };
   }
 
-// Fetch rounds associated with the competition, including race winners
-const [roundRows] = await pool.query(
-  `
-  SELECT 
-  r.RoundID AS id,
-  r.Name,
-  r.Date,
-  d1.Name as raceWinnerName,
-  d2.Name as poleSitterName
-  FROM round r
-  LEFT JOIN rounddriver rdw ON r.RoundID = rdw.RoundID AND rdw.position = 1
-  LEFT JOIN rounddriver rdp ON r.RoundID = rdp.RoundID AND rdp.pole_position = 1
-  LEFT JOIN driver d1 ON d1.DriverID = rdw.DriverID
-  LEFT JOIN driver d2 ON d2.DriverID = rdp.DriverID
-  WHERE r.CompetitionID = ?
-  `,
-  [id]
-);
+  // Fetch rounds associated with the competition, including race winners
+  const [roundRows] = await pool.query(
+    `
+    SELECT 
+    r.RoundID AS id,
+    r.Name,
+    r.Date,
+    d1.Name as raceWinnerName,
+    d2.Name as poleSitterName
+    FROM round r
+    LEFT JOIN rounddriver rdw ON r.RoundID = rdw.RoundID AND rdw.position = 1
+    LEFT JOIN rounddriver rdp ON r.RoundID = rdp.RoundID AND rdp.pole_position = 1
+    LEFT JOIN driver d1 ON d1.DriverID = rdw.DriverID
+    LEFT JOIN driver d2 ON d2.DriverID = rdp.DriverID
+    WHERE r.CompetitionID = ?
+    `,
+    [id]
+  );
 
-const roundMap = new Map(); // Map to store round information
+  const roundMap = new Map(); // Map to store round information
 
-// Map race winners and pole sitters to round IDs
-roundRows.forEach((row: any) => {
-  const roundId = row.id;
-  const raceWinnerName = row.raceWinnerName || 'N/A';
-  const poleSitterName = row.poleSitterName || 'N/A';
-  roundMap.set(roundId, { name: row.Name, Date: row.Date, raceWinnerName, poleSitterName });
-});
+  // Map race winners and pole sitters to round IDs
+  roundRows.forEach((row: any) => {
+    const roundId = row.id;
+    const raceWinnerName = row.raceWinnerName || 'N/A';
+    const poleSitterName = row.poleSitterName || 'N/A';
+    roundMap.set(roundId, { name: row.Name, Date: row.Date, raceWinnerName, poleSitterName });
+  });
 
-console.log('Round Map:', roundMap); // Log roundMap to verify the structure
-
-// Convert map entries to Round objects
-const rounds: Round[] = Array.from(roundMap.values()).map((value: any) => ({
-  id: value.id || 0,
-  name: value.name,
-  date: new Date(value.Date).toDateString(),
-  raceWinner: value.raceWinnerName,
-  poleSitter: value.poleSitterName,
-}));
-
-  
+  // Convert map entries to Round objects
+  const rounds: Round[] = Array.from(roundMap.values()).map((value: any) => ({
+    id: value.id || 0,
+    name: value.name,
+    date: new Date(value.Date).toDateString(),
+    raceWinner: value.raceWinnerName,
+    poleSitter: value.poleSitterName,
+  }));
 
   // Fetch drivers associated with the competition
   const [driverRows] = await pool.query(`
@@ -162,6 +157,21 @@ const rounds: Round[] = Array.from(roundMap.values()).map((value: any) => ({
     })),
   };
 
+  // Fetch penalties for the competition
+  const [penaltyRows] = await pool.query('SELECT * FROM Penalties WHERE CompetitionID = ?', [id]);
+
+  // Create a map to store penalties for each driver
+  const driverPenalties: Record<number, number> = {};
+  
+  // Process penalty rows and accumulate penalties for each driver
+  penaltyRows.forEach((penalty: any) => {
+    const driverID = penalty.DriverID;
+    const penaltyPoints = penalty.PenaltyPoints;
+    
+    // Add penalty points to the driver's total penalties
+    driverPenalties[driverID] = (driverPenalties[driverID] || 0) + penaltyPoints;
+  });
+
   const driverPoints: Record<number, number> = {};
   const driverPolePositions: Record<number, number> = {}; // Initialize driver pole positions record
 
@@ -176,28 +186,78 @@ const rounds: Round[] = Array.from(roundMap.values()).map((value: any) => ({
     let totalPoints = 0;
     let polePositions = 0; // Initialize pole positions counter
 
-    for (const row of pointsRows) {
-      totalPoints += getPointsByPosition(row.position);
-      if (parseInt(row.pole_position) === 1) { // Check if pole position
+    // Track the worst position excluding the last race
+    let worstPosition = 0;
+    let missedRaces = 0;
+    for (let i = 0; i < pointsRows.length; i++) {
+      const position = parseInt(pointsRows[i].position);
+      if (i < pointsRows.length - 1 && position > worstPosition) {
+        worstPosition = position;
+      }
+      if (parseInt(pointsRows[i].pole_position) === 1) { // Check if pole position
         polePositions++;
       }
+      if(position === 8888)
+      {
+        missedRaces++
+      }
+    }
+
+    // Flag to keep track of whether one instance of worst position has been excluded
+    let worstPositionExcluded = false;
+
+    // Calculate points excluding the worst position for all races except the last one
+    for (const row of pointsRows) {
+      const position = parseInt(row.position);
+      const isPolePosition = parseInt(row.pole_position) === 1;
+
+      // Check if the current race is the last one
+      const isLastRace = pointsRows.indexOf(row) === pointsRows.length - 1;
+
+      // Exclude worst position only if it's not the last race, if it's not a missed race, and if one instance hasn't been excluded yet
+      if ((position !== worstPosition || isLastRace || worstPositionExcluded) && position !== 8888) {
+        totalPoints += getPointsByPosition(row.position, isPolePosition);
+      }
+
+      // Update worstPositionExcluded flag if the current position matches the worst position
+      if (position === worstPosition && !worstPositionExcluded) {
+        worstPositionExcluded = true;
+      }
+    }
+
+    // Apply penalties to driver points
+    if (missedRaces < 2) {
+      totalPoints += 15;
     }
 
     driver.points = totalPoints;  // Assign the calculated points to the driver object
     driverPolePositions[driver.id] = polePositions; // Assign the calculated pole positions to the driver object
     driverPoints[driver.id] = totalPoints;
+
   }
-  // Sort the drivers by points in descending order
+
+  // Apply penalties to driver points
+  competition.drivers.forEach((driver) => {
+    const penaltyPoints = driverPenalties[driver.id] || 0;
+    driver.points -= penaltyPoints; // Subtract penalty points from driver's total points
+  });
+  
+  // Sort the drivers by adjusted points in descending order
   competition.drivers.sort((a, b) => b.points - a.points);
 
   return { props: { competition, driverPoints, driverPolePositions } };
 };
 
-const getPointsByPosition = (position: number): number => {
+
+
+
+
+
+const getPointsByPosition = (position: number, isPolePosition: boolean): number => {
   const pointsMap = {
     1: 50,
-    2: 45,
-    3: 40,
+    2: 40,
+    3: 35,
     4: 32,
     5: 30,
     6: 28,
@@ -225,7 +285,16 @@ const getPointsByPosition = (position: number): number => {
     28: 2,
     29: 1,
     30: 1,
+    polePosition: 3,
   };
 
-  return pointsMap[position] || 0;
+  // If it's a pole position, return the points for pole position
+  if (isPolePosition) {
+    return pointsMap[position] + pointsMap.polePosition;
+  }
+  else
+  {
+    return pointsMap[position] || 0;
+  }
 };
+
