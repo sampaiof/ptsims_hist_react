@@ -146,10 +146,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     {
       query: `
         SELECT 
-        YEAR(r.Date) AS year,
-        COUNT(*) AS totalRaces
-        FROM round r
-        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+          YEAR(r.Date) AS year,
+          COUNT(*) AS totalRaces
+        FROM race r
+        JOIN racedriver rd ON r.RaceID = rd.RaceID
         JOIN driver d ON rd.DriverID = d.DriverID
         WHERE d.DriverID = ?
         GROUP BY year;
@@ -159,8 +159,8 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     {
       query: `
         SELECT r.Name AS raceName, r.Date, rd.position
-        FROM round r
-        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+        FROM race r
+        JOIN racedriver rd ON r.RaceID = rd.RaceID
         JOIN driver d ON rd.DriverID = d.DriverID
         WHERE d.DriverID = ?
         ORDER BY r.Date DESC
@@ -170,10 +170,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     },
     {
       query: `
-        SELECT c.CompetitionID AS id, c.Name, c.Date
+        SELECT c.Name AS competitionName, c.Date
         FROM competition c
-        JOIN round r ON c.CompetitionID = r.CompetitionID
-        JOIN rounddriver rd ON r.RoundID = rd.RoundID
+        JOIN race r ON c.CompetitionID = r.CompetitionID
+        JOIN racedriver rd ON r.RaceID = rd.RaceID
         JOIN driver d ON rd.DriverID = d.DriverID
         WHERE d.DriverID = ?
         GROUP BY c.CompetitionID
@@ -187,9 +187,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         SELECT 
           SUM(CASE WHEN rd.position <= 3 THEN 1 ELSE 0 END) AS top3,
           SUM(CASE WHEN rd.position <= 5 THEN 1 ELSE 0 END) AS top5,
-          SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS polePositions,
+          SUM(CASE WHEN rd.pole_position = 1 THEN 1 ELSE 0 END) AS polePositions,
           SUM(CASE WHEN rd.position = 1 THEN 1 ELSE 0 END) AS victories
-        FROM rounddriver rd
+        FROM racedriver rd
         WHERE rd.DriverID = ?;
       `,
       key: 'statsRows',
@@ -230,7 +230,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
       position: row.position,
     })),
     lastCompetitions: competitionRows.map((row: any) => ({
-      name: row.Name,
+      name: row.competitionName || "Unknown Competition", // Handle undefined name
       date: new Date(row.Date).toDateString(),
     })),
     top3: statsRows[0].top3,
@@ -241,3 +241,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   
   return { props: { driver } };
 };
+
+
+
+
