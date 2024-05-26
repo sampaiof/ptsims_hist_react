@@ -1,7 +1,9 @@
-import { Box, Typography } from "@mui/material";
 import { GetServerSideProps } from 'next';
 import pool from "../../utils/db";
 import NavBar from '../../components/NavBar';
+import React from 'react';
+import { Box, Card, CardContent, CardMedia, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+
 
 type Round = {
   id: number;
@@ -23,6 +25,8 @@ type Driver = {
 type Competition = {
   id: number;
   name: string;
+  simulator: string;
+  comp_type: string;
   rounds: Round[];
   drivers: Driver[];
 };
@@ -76,7 +80,10 @@ const getPointsByPosition = (position: number, isPolePosition: boolean): number 
 };
 
 const fetchCompetitionDetails = async (competitionId: string) => {
-  const [competitionRows] = await pool.query('SELECT * FROM competition WHERE CompetitionID = ?', [competitionId]);
+  const [competitionRows] = await pool.query(`select c.CompetitionID, c.Name as name, c.Date, c.Location , s.Name as simulator, ct.TypeName  from competition c
+	join simulator s on s.SimulatorID = c.SimulatorID 
+	join competitiontype ct on ct.CompetitionTypeID = c.CompetitionTypeID 
+	where c.CompetitionID =?`, [competitionId]);
   return competitionRows.length > 0 ? competitionRows[0] : null;
 };
 
@@ -209,6 +216,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     const competitionId = id as string;
 
     const competition = await fetchCompetitionDetails(competitionId);
+    console.log("competição",competition);
     if (!competition) {
       return { notFound: true };
     }
@@ -248,7 +256,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
     const competitionData: Competition = {
       id: competition.CompetitionID,
-      name: competition.Name,
+      name: competition.name,
+      simulator: competition.simulator,
+      comp_type: competition.TypeName,
       rounds,
       drivers: driverRows.map((row: any) => ({
         id: row.id,
@@ -266,7 +276,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   }
 };
 
-export default function CompetitionPage({ competition, driverPoints, driverPolePositions }: CompetitionProps) {
+export default function CompetitionPage({ competition, driverPoints, driverPolePositions }) {
   if (!competition) {
     return (
       <>
@@ -282,50 +292,77 @@ export default function CompetitionPage({ competition, driverPoints, driverPoleP
     <>
       <NavBar />
       <Box p={4}>
-        <Typography variant="h4">{competition.name}</Typography>
+      <Card sx={{ display: 'flex', mb: 4 }}>
+          {competition.simulator.logoPath && (
+            <CardMedia
+              component="img"
+              sx={{ width: 151 }}
+              image={competition.simulator.logoPath}
+              alt={`${competition.simulator.name} logo`}
+            />
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <CardContent>
+              <Typography component="div" variant="h5">{competition.name}</Typography>
+              <Typography variant="subtitle1" color="text.secondary" component="div">
+                Simulator: {competition.simulator.name}
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary" component="div">
+                Type: {competition.type}
+              </Typography>
+            </CardContent>
+          </Box>
+        </Card>
+
         <Typography variant="h5" mt={4}>Rounds</Typography>
-        <table>
-          <thead>
-            <tr>
-              <th>Round</th>
-              <th>Date</th>
-              <th>Pole Sitter</th>
-              <th>Race Winner</th>
-            </tr>
-          </thead>
-          <tbody>
-            {competition.rounds.map((round) => (
-              <tr key={round.id}>
-                <td>{round.name || 'N/A'}</td>
-                <td>{round.date || 'N/A'}</td>
-                <td>{round.poleSitter || 'N/A'}</td>
-                <td>{round.raceWinner || 'N/A'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Round</TableCell>
+                <TableCell>Date</TableCell>
+                <TableCell>Pole Sitter</TableCell>
+                <TableCell>Race 1 Winner</TableCell>
+                <TableCell>Race 2 Winner</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {competition.rounds.map((round) => (
+                <TableRow key={round.id}>
+                  <TableCell>{round.name || 'N/A'}</TableCell>
+                  <TableCell>{round.date || 'N/A'}</TableCell>
+                  <TableCell>{round.poleSitter || 'N/A'}</TableCell>
+                  <TableCell>{round.race1Winner || 'N/A'}</TableCell>
+                  <TableCell>{round.race2Winner || 'N/A'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         <Typography variant="h5" mt={4}>Drivers</Typography>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Numero</th>
-              <th>Points</th>
-              <th>Pole Positions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {competition.drivers.map((driver) => (
-              <tr key={driver.id}>
-                <td>{driver.name || 'N/A'}</td>
-                <td>{driver.numero || 'N/A'}</td>
-                <td>{driverPoints[driver.id] !== undefined ? driverPoints[driver.id] : 'N/A'}</td>
-                <td>{driverPolePositions[driver.id] !== undefined ? driverPolePositions[driver.id] : 'N/A'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Number</TableCell>
+                <TableCell>Points</TableCell>
+                <TableCell>Pole Positions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {competition.drivers.map((driver) => (
+                <TableRow key={driver.id}>
+                  <TableCell>{driver.name || 'N/A'}</TableCell>
+                  <TableCell>{driver.numero || 'N/A'}</TableCell>
+                  <TableCell>{driverPoints[driver.id] !== undefined ? driverPoints[driver.id] : 'N/A'}</TableCell>
+                  <TableCell>{driverPolePositions[driver.id] !== undefined ? driverPolePositions[driver.id] : 'N/A'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Box>
     </>
   );
